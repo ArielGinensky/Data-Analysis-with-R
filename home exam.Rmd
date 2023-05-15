@@ -1,0 +1,513 @@
+title: '52414: Home Exam 312297559'
+
+output:
+
+  html_document: default
+
+  pdf_document: default
+
+date: "June 30th, 2022"
+
+
+
+```{r, echo = FALSE, results = 'hide', warning=FALSE, message=FALSE}
+
+library(rvest)  # for html
+
+library(geonames)
+
+library(uniformly) # for sampling uniformly from the sphere 
+
+library(GGally)  # for ggpairs
+
+library(lubridate)  # for parsing time 
+
+library(e1071) # skewness and kurtosis
+
+library(pracma)
+
+
+options(scipen=999)
+
+library(ggmap)
+library(data.table)
+library(lubridate)
+library(magrittr)
+library(maps)
+library(textreadr)
+library(rworldmap)
+library(readxl)
+
+```
+
+
+## Q1. Simulate random points on earth (31 pt)    
+
+<img src="https://www.educationworld.in/wp-content/uploads/2019/04/Untitled-design-3-1-768x576.jpg" alt="Earth" width="300"/>
+
+In this question we simulate random locations on earth. For simplicity, we assume that earth is a ball with a radius of $r = 6371 km$ (we ignore the fact that earth is not an exact ball), and we will simulate random points on the surface of the ball, i.e. from a sphere with this radius. Each location on earth can be represented using three Cartesian coordinates $(x,y,z)$, where the center of earth is at $(0,0,0)$, and each point on the surface satisfies $x^2+y^2+z^2 = r^2$. Alternatively, we also use spherical coordinates to represent points on earth: $(r,\theta, \phi)$ where $\phi \in [0, 2\pi]$ and $\theta \in [0, \pi]$. Here $r$ is always the same, at $6371$ (points **inside** earth will have a lower $r$ value). $\phi$ is the `longitude`, with points on the [Prime meridian] (https://en.wikipedia.org/wiki/Prime_meridian_(Greenwich)) (Greenwich line) having $\phi=0$, and then $\phi$ is increased as we move east. For example, if we move east and complete half a circle around the world, we reach points at the [international date line](https://en.wikipedia.org/wiki/International_Date_Line), and they will have $\phi=\pi$, and as we approach the Greenwich line again from west (i.e. when completing a full circle), $\phi$ will get closer and closer to $2\pi$. $\theta$ is the `latitude`, with the north (south) pole having $\theta=\pi$ ($\theta=0$), and points on the equator have $\theta=\frac{\pi}{2}$. 
+
+**Note:** A common way to represent (spherical) geographical coordinates is to set the longitude $\phi$ between $[-180,180]$ (instead of $[0,2\pi]$), where positive (negative) values correspond to east (west) of the Greenwich line. The latitude $\theta$ is set between $[-90,90]$ (instead of $[0,\pi]$), where positive (negative) values correspond to north (south) of the equator. We will refer to this convention as **geographical coordinates**, and will use it in some parts of the exam, e.g. when reading real geographical data.
+
+For two points on the sphere, we define their **Euclidean distance** as the standard distance in space, i.e. the length of the straight line connecting the points, that passes through the ball. This will be the length you need to travel if you could dig a straight hole between the two locations. The *Euclidean distance* has a simple formula in terms of the Cartesian coordinates. For two points $(x_1,y_1,z_1)$ and $(x_2,y_2,z_2)$, their distance is
+
+$$
+
+d(p_1,p_2) \equiv \sqrt{(x_1-x_2)^2+(y_1-y_2)^2+(z_1-z_2)^2}
+
+$$
+
+We also define the **geodesic distance** of two points, as the length of the shortest path connecting them along the sphere. This is the length you will have to travel if you fly in a 'straight line' along the sphere between the two points, along a [great circle](https://en.wikipedia.org/wiki/Great_circle), and for the sphere it is also called `great circle distance` or `spherical distance`. The *geodesic distance* has a simple formula in terms of the spherical coordinates. For two points $(r,\theta_1,\phi_1)$ and $(r,\theta_2,\phi_2)$, their distance is
+
+$$
+
+g(p_1,p_2) \equiv r \cos^{-1} \Big(\cos (\theta_1) \cos (\theta_2) + \sin (\theta_1) \sin (\theta_2) \cos(\phi_1 - \phi_2)\Big)
+
+$$
+
+For example, if $\phi_1=\phi_2$ then the distance simplifies to $g(p_1,p_2) = r |\theta_1 - \theta_2|$.
+
+The length of the red line in the figure below is the geodesic distance of $p$ and $q$. The length of a straight line through the ball (not drawn) will be the euclidean distance of $p$ and $q$ <img src="https://users.cs.jmu.edu/bernstdh/web/common/lectures/images/great-circle-distance.gif" alt="Geodesic Distance" width="300"/>
+
+
+
+a. (10pt) What is the average **geodesic distance** between two points sampled uniformly on the sphere? simulate $1000$ random pairs of points and estimate it using the pairwise distances computed for the simulated points.
+You may use the function `runif_on_sphere` from the package `uniformly`, to simulate points uniformly on the sphere.
+
+```{r}
+sphere_distance_2_points_func = function(point1, point2){
+  theta1 = point1[,1]
+  phi1 = point1[,2]
+  theta2 = point2[,1]
+  phi2 = point2[,2]
+
+  sphere_distance_2_points = 6371*acos(cos(theta1)*cos(theta2) + sin(theta1)*sin(theta2)*cos(phi1 - phi2))
+
+  return(sphere_distance_2_points)
+}
+
+point1_tab = runif_on_sphere(n = 1000, d = 3, r = 6371)
+point2_tab = runif_on_sphere(n = 1000, d = 3, r = 6371)
+
+point1_sphere_tab = cart2sph(point1_tab)
+point2_sphere_tab = cart2sph(point2_tab)
+
+vec_of_sphere_distance = sphere_distance_2_points_func(point1_sphere_tab, point2_sphere_tab)
+
+avg_sphere_distance = mean(vec_of_sphere_distance)
+avg_sphere_distance
+```
+Explanation:
+I created two data frames of 1000 random spherical coordinates. Next I converted the coordinates to Cartesian coordinates. Next we use the function 'sphere_distance_2_points_func' that receives 2 matrices and calculates the distance between  each pair of i'th coordinate in both matrices.The function returns a vector of distances, we find the average distance between each two points.
+
+
+Next, repeat the same simulation but this time estimate the average **Euclidean distance** between two random points on the sphere. <br>
+
+```{r}
+euc_distance_2_points_func = function(point1, point2){
+  x1 = point1_tab[,1]
+  y1 = point1_tab[,2]
+  z1 = point1_tab[,3]
+
+  x2 = point2_tab[,1]
+  y2 = point2_tab[,2]
+  z2 = point2_tab[,3]
+
+  euc_distance_2_points = sqrt((x1-x2)^2 + (y1-y2)^2 + (z1-z2)^2)
+  return(euc_distance_2_points)
+}
+
+vec_of_euc_distance = euc_distance_2_points_func(point1_tab, point2_tab)
+avg_euc_distance = mean(vec_of_euc_distance)
+avg_euc_distance
+
+```
+Explanation:
+I created the function 'euc_distance_2_points_func' that returns a vector of euclidean distances between each i'th points. We use this vector to find the average euclidean distance between 2 points.
+
+
+
+b. (6pt) Repeat the above simulations, but this time keep all results and plot the empirical distributions for the two types of distance. 
+
+```{r}
+sphere_dist_plot = plot(density(vec_of_sphere_distance))
+euc_dist_plot = plot(density(vec_of_euc_distance))
+```
+
+
+Compute the *skewness* and *kurtosis* of the two empirical distance distributions. Which of them looks closer to the Normal distribution? explain. 
+
+```{r}
+skewness_kurtosis_tab_func = function(sphere_dist, euc_dist){
+  skew_kurt_tab = matrix(ncol = 2, nrow = 2)
+  rownames(skew_kurt_tab) = c("skewness", "kurtosis")
+  colnames(skew_kurt_tab) = c("sphere_coordinates", "euclidean_coordinates")
+  skew_kurt_tab[,1] = c(skewness(sphere_dist, type = 2), kurtosis(sphere_dist, type = 2))
+  skew_kurt_tab[,2] = c(skewness(euc_dist, type = 2), kurtosis(euc_dist, type = 2))
+  return(skew_kurt_tab)
+}
+skewness_kurtosis_tab = skewness_kurtosis_tab_func(vec_of_sphere_distance, vec_of_euc_distance)
+skewness_kurtosis_tab
+```
+I created the function 'skewness_kurtosis_tab_func' that returns a matrix with the skewness and kurtosis values for the sphere and euclidean distances.
+
+
+
+c. (7pt) Write a function that receives as input $n$, the number of desired samples, and a string representing a country's name. The function should sample random points from the specific country.Use rejection sampling, where you can check if a point belongs to a country using the `map.where` function from the `maps` package. Run the function to sample $1000$ pairs of points in the **USA** and estimate the average geodesic distance for two random points in **USA**.
+**Hint:** You may need to convert your points to **geographical coordinates**. <br>
+
+```{r}
+random_points_in_country_func = function(n , the_country_name){
+  num_of_coordinates = 1
+  two_points_mat = as.data.frame(NA, nrow = n, ncol = 3)
+  while(num_of_coordinates < n+1){
+    the_coord = runif_on_sphere(1, d = 3, r = 6371)
+    latitude = asin(the_coord[3]/6371)*(180/pi)
+    longitude = atan2(the_coord[2], the_coord[1])*(180/pi)
+    is_country = map.where(database = "world", latitude, longitude)
+    if(!is.na(is_country)){
+      if(is_country == the_country_name){
+        two_points_mat[num_of_coordinates,1] = the_coord[1]
+        two_points_mat[num_of_coordinates,2] = the_coord[2]
+        two_points_mat[num_of_coordinates,3] = the_coord[3]
+        num_of_coordinates = num_of_coordinates + 1
+      }}}
+  return(two_points_mat)
+}  
+
+point1_usa = random_points_in_country_func(10, "USA")
+
+point2_usa = random_points_in_country_func(10, "USA")
+
+dist_of_points_usa = euc_distance_2_points_func(point1_usa, point2_usa)
+avg_distance_usa = mean(dist_of_points_usa)
+avg_distance_usa
+
+```
+
+
+For which countries do you think that the rejection sampling method would be problematic? How would you improve it? explain in words (no need for analysis/code for this part).
+
+Answer:
+I think the rejection sampling will be problematic for small countries. I would suggest to first find the coordinates of a larger area around the country and after find the coordinates of the country I am looking for.
+
+
+
+d. (8pt) A statistician proposes to you two different methods for sampling points on the surface of the sphere of radius $r$: <br>
+
+(i.) Sample from a uniform distribution $\phi \sim U[0,2\pi]$ and $\theta \sim U[0,\pi]$ independently, to get a point in spherical coordinates $(r,\phi,\theta)$. <br>
+
+This point can be converted to Cartesian coordinates to get $(x,y,z)$. <br>
+
+(ii.) Sample from a Normal distribution $x,y,z \sim N(0,1)$ independently, and then normalize the resulting vector, i.e. set: 
+
+$$
+
+(x, y, z) \leftarrow \frac{r}{\sqrt{x^2+y^2+z^2}} (x, y, z) 
+
+$$
+
+For each of the two methods, determine if the method really samples points uniformly on the sphere, or whether there are certain areas of the sphere that will be more/less dense than others. You may use mathematical arguments and/or simulation results with computed statistics/plots to support your conclusion. <br>
+
+Note that the uniform distribution on the sphere has the property that two regions of equal areas on the sphere always have the same probability (this can be defined mathematically in details, but the formal definitions are not needed for the questions).
+
+Recall that we know that the function `runif_on_sphere` does sample from the uniform distribution over the sphere, and you may compare your two methods to the output of this function. 
+
+```{r}
+theta_vec = runif(1000,0,pi)
+
+phi_vec = runif(1000,0,2*pi)
+r = 6371
+first_method = cbind(r,theta_vec,phi_vec)
+first_method_norm = sph2cart(first_method)
+plot(density(first_method_norm))
+
+
+x_1 = rnorm(1000) 
+y_1 = rnorm(1000) 
+z_1 = rnorm(1000)
+x_1_norm = x_1*(6371/sqrt(x_1^2 +y_1^2 + z_1^2))
+y_1_norm = y_1*(6371/sqrt(x_1^2 +y_1^2 + z_1^2))
+z_1_norm = z_1*(6371/sqrt(x_1^2 +y_1^2 + z_1^2))
+second_method = cbind(x_1_norm,y_1_norm,z_1_norm)
+
+tester = runif_on_sphere(1000, 3, 6371)
+
+plot(density(tester))
+plot(density(second_method))
+plot(density(first_method_norm))
+```
+
+
+
+## Q2. Analysis of geographical data (36 pt)    
+
+a. (6pt) Read the list of world countries by area from Wikipedia dataset file [here](https://en.wikipedia.org/wiki/List_of_countries_and_dependencies_by_area). 
+
+Use the `rvest` package to read the html file and extract the data table representing countries by their area into a data-frame. Remove rows with country name containing parenthesis (). Convert the column representing total area to numerical values in square km. For countries where more than one value is available, take the first one. Show the top and bottom two rows of the resulting data-frame. 
+
+```{r}
+#country_list_url_1 = read_html("https://en.wikipedia.org/wiki/List_of_countries_and_dependencies_by_area")
+
+#View(country_list_url_1)
+#country_list_url_to_tab_1 = html_node(country_list_url_1, ".wikitable")
+#country_list_tab_1 = html_table(matrix(country_list_url_1), fill = TRUE)[[2]]
+#country_list_tab_1 = as.data.frame(html_table(country_list_url_1, fill = TRUE)[[2]])
+
+country_list_tab_1 = read_excel("C:/Users/Owner/Desktop/statistics degree/year 2/2nd Semester/Data Analysis with R/home_exam_files/wikipedia data of country size.xlsx")
+
+rows_with_parenthesis = c(which(grepl("(", country_list_tab_1$`Country / dependency`, fixed = TRUE)))
+
+country_list_tab_1 = country_list_tab_1[-rows_with_parenthesis,]
+
+country_list_tab_1$`Total in km2 (mi2)` = gsub("\\(.*", "", country_list_tab_1$`Total in km2 (mi2)`)
+country_list_tab_1$`Total in km2 (mi2)` = as.numeric(gsub(",", "", country_list_tab_1$`Total in km2 (mi2)`))
+head(country_list_tab_1, n = 2)
+tail(country_list_tab_1, n = 2)
+
+```
+
+
+
+b. (6pt) Repeat the above analysis but this time with the list of world countries by population from [here](https://en.wikipedia.org/wiki/List_of_countries_and_dependencies_by_population), where instead of the total area column, convert to numerical values the column representing total population.
+
+```{r}
+#country_list_url_2 = read_html("https://en.wikipedia.org/wiki/List_of_countries_and_dependencies_by_population") 
+#country_list_url_to_tab_2 = country_list_url_2 %>% html_table(fill=TRUE)
+#country_list_tab_2 = country_list_url_to_tab_2[[1]]
+
+country_list_tab_2 =as.data.frame(read_excel("C:/Users/Owner/Desktop/statistics degree/year 2/2nd Semester/Data Analysis with R/home_exam_files/wikipedia data of population.xlsx"))
+
+rows_with_parenthesis = c(which(grepl("(", country_list_tab_2$`Country / Dependency`, fixed = TRUE)))
+
+country_list_tab_2 = country_list_tab_2[-rows_with_parenthesis,]
+country_list_tab_2$Population = as.numeric(gsub("\\,", "", country_list_tab_2$Population))
+head(country_list_tab_2, n = 2)
+tail(country_list_tab_2, n = 2)
+#View(country_list_tab_2)
+```
+
+
+
+c. (6pt) Merge the two data-frames into a new one (denoted the `wikipedia` data-frame) and add a new column called `pop.density`, that lists for each country the number of people per square km. 
+
+```{r}
+names.wiki <- c("United States", "Kingdom of Denmark", "Republic of the Congo", "Sahrawi Arab Democratic Republic", "United Kingdom", "Somaliland", "Eswatini", "The Bahamas", "The Gambia", "Abkhazia", "United States Minor Outlying Islands", "State of Palestine", "Transnistria", "South Ossetia",  "Northern Cyprus",  "Artsakh", "East Timor", "Trinidad and Tobago")
+
+names.map <- c("USA", "Denmark", "Republic of Congo", "Western Sahara", "UK", "Somalia", "Swaziland", "Bahamas", "Gambia", "Georgia", "USA", "Palestine", "Moldova", "Georgia", "Cyprus",  "Armenia", "Timor-Leste", "Trinidad")
+```
+
+
+```{r}
+country_list_tab_1_by_alpha = country_list_tab_1[order(country_list_tab_1$`Country / dependency`),]
+country_list_tab_2_by_alpha = country_list_tab_2[order(country_list_tab_2$`Country / Dependency`),]
+View(country_list_tab_1_by_alpha)
+names_to_change = c()
+for (i in 1:length(names.wiki)) {
+  a = which(names.wiki[i] %in% country_list_tab_1_by_alpha$`country/dependency`)
+  names_to_change = append(names_to_change, a)
+}
+names_to_change
+country_names_to_change_tab_1 = which(names.wiki %in% country_list_tab_1_by_alpha$`country/dependency`)
+View(country_names_to_change_tab_1)
+country_list_tab_1_by_alpha$`country/dependency`[country_names_to_change_tab_1] = names.wiki
+
+country_names_to_change_tab_2 = c(which(country_list_tab_2_by_alpha$`country/dependency` %in% names.wiki))
+View(country_names_to_change_tab_2)
+country_list_tab_2_by_alpha$`country/dependency`[country_names_to_change_tab_2] = names.wiki
+country_list_tab_1_by_alpha = country_list_tab_1_by_alpha[which(country_list_tab_1_by_alpha$`Country / dependency` %in% country_list_tab_2_by_alpha$`Country / Dependency`),]
+
+country_list_tab_2_by_alpha = country_list_tab_2_by_alpha[which(country_list_tab_1_by_alpha$`Country / dependency` %in% country_list_tab_2_by_alpha$`Country / Dependency`),]
+
+
+colnames(country_list_tab_1_by_alpha)[c(1,2,7)] = c("rank by size","country/dependency", "note for size")
+colnames(country_list_tab_2_by_alpha)[c(1,2,8)] = c("rank by population","country/dependency", "notes for population")
+wikipedia_df = merge(country_list_tab_1_by_alpha, country_list_tab_2_by_alpha, by = "country/dependency")
+#country_list_tab_2_by_alpha$`country/dependency`
+#colnames(country_list_tab_2_by_alpha)
+wikipedia_df$pop.density = wikipedia_df$Population / wikipedia_df$`Total in km2 (mi2)`
+
+```
+
+
+Show a world-map (you can use the package  `rworldmap`), where each country is colored by its population density. Display the three most dense and three least dense countries in the world in a table.
+
+```{r}
+my_names_wiki = c("Abkhazia", "East Timor", "Eswatini", "Northern Cyprus", "South Ossetia", "Transnistria", "Trinidad and Tobago", "United Kingdom", "United States")
+
+my_names_map = c("Georgia", "Timor-Leste", "Swaziland", "Cyprus", "Georgia", "Moldova", "Trinidad", "UK", "USA")
+
+names_to_change = which(wikipedia_df$`country/dependency` %in% my_names_wiki)
+names_to_change
+wikipedia_df$`country/dependency`[c(names_to_change)] = my_names_map
+
+wikipedia_df_by_alph = wikipedia_df[order(wikipedia_df$`country/dependency`),]
+wikipedia_df_by_alph = wikipedia_df[-c(1,45, 126, 160, 175),]
+
+data_to_map = joinCountryData2Map(wikipedia_df_by_alph, joinCode = "NAME", nameJoinColumn = "country/dependency", suggestForFailedCodes = TRUE)
+mapCountryData(data_to_map, nameColumnToPlot = "pop.density")
+wikipedia_df_by_alph$pop.density
+```
+
+
+
+d. (8pt) Suppose that we choose two random individuals uniformly at random from the world's population, and suppose that each individual is located uniformly at random in her country - what will be the average geodesic distance between the two? <br>
+
+Simulate $1000$ pairs of people: first, sample their nationalities, and then sample their locations conditional on their nationality.
+
+To speed-up the simulation, you may ignore countries with area smaller than $1000$ square km. Use the lists of names to match between the names from wikipedia
+
+to the names returned by the `map.where` function. Additional parsing might be needed for the output of this function in a few cases.
+
+Use the simulation to estimate the average geodesic distance. How does it compare to the average geodesic distance between two random points on earth? 
+
+```{r}
+
+
+
+
+
+
+
+```
+
+
+e. (10t) Suppose that we didn't know the countries' areas and want to estimate the area of a country by sampling. 
+
+Write a function that receives as input a vector of country names, a number of samples $n$, and outputs estimates for the areas of all countries in square km, based on drawing $n$ random points on earth and recording the relative frequency of points falling within each country. <br>
+
+Run the function with $n=10000$ samples and with the list of countries from the `wikipedia` data-frame.
+
+Report separately the top 10 countries with the largest **estimated** areas and 
+
+the top 10 countries with the largest **true** areas in tables. Do you see an agreement between the two top-10 lists? <br>
+
+Next, merge the estimated areas results with the data-frame and plot the true area (x-axis) vs. the estimated area (y-axis) for all countries. What is the $R^2$ between the two?
+
+
+
+## Q3. Analysis and visualization of earthquake geographical data (33 pt)    
+
+<img src="https://i.cbc.ca/1.1877835.1380772347!/httpImage/image.jpg_gen/derivatives/original_1180/earthquake-magnitude.jpg" alt="resolutions" width="300"/>
+
+a. (6pt) Read the earthquakes dataset from [USGS](https://earthquake.usgs.gov/earthquakes/search/). Select all earthquakes in the world in 2022 of magnitude above 2.5, and save them to a `.csv` file (The magnitude is in [Richter's scale](https://en.wikipedia.org/wiki/Richter_magnitude_scale)). Load the dataset into an R data-frame, and display the five latest earthquakes and the five strongest earthquakes.
+
+```{r}
+earthquake_df = as.data.frame(read.csv("earthquake data.csv"))
+
+latest_EQ_df = tail(earthquake_df, 5)
+
+strongest_EQ_df = tail(earthquake_df[order(earthquake_df$mag),], 5)
+```
+Explanation:
+I loaded the dataset by order of events, from first earthquake at the top of the data frame until the last earthquake to accur until i loaded the data. Therefore I used the tail function to get a df of latest earthquakes. Same with strongest earthquakes, I used the order function to set strongest earthquakes at the tail og the df.
+
+
+
+b. (6pt) Plot the earthquakes on top of on the world map. That is, each earthquake should be represented by a point, with the `x` axis representing `longitude`, the `y` axis representing `latitude`, and the size of the point representing the magnitude. This scatter plot should be on top of the world map, drawn using the `geom_map` function from the `ggmap` package. The data-frame representing the map can be generated as the output of the command  `map_data("world")`.
+
+```{r}
+ggplot() + geom_map(data = map_data("world"), map = map_data("world"), aes(map_id = region)) + geom_point(data = earthquake_df, aes(longitude, latitude, size = mag, color = mag)) + scale_size_continuous(name ="mag of earthquake scale", range = c(0.5,1))
+```
+
+
+
+c. (6pt) Repeat the plot from (b.), but this time make separate plots for different earthquakes, where they are grouped together by magnitude. That is, there should be a separate plot for each of the following magnitude ranges: between $2$ and $3$, between $3$ and $4$, ..., , between $7$ and $8$. <br>
+
+```{r}
+earthquake_df_2_3 = earthquake_df[earthquake_df$mag %between% c(2.0, 3.0),]
+earthquake_df_3_4 = earthquake_df[earthquake_df$mag %between% c(3.0, 4.0),]
+earthquake_df_4_5 = earthquake_df[earthquake_df$mag %between% c(4.0, 5.0),]
+earthquake_df_5_6 = earthquake_df[earthquake_df$mag %between% c(5.0, 6.0),]
+earthquake_df_6_7 = earthquake_df[earthquake_df$mag %between% c(6.0, 7.0),]
+earthquake_df_7_8 = earthquake_df[earthquake_df$mag %between% c(7.0, 8.0),]
+
+ggplot() + geom_map(data = map_data("world"), map = map_data("world"), aes(map_id = region)) + geom_point(data = earthquake_df_2_3, aes(longitude, latitude, size = mag, color = mag)) + scale_size_continuous(name ="mag of earthquake scale", range = c(0.5,1))
+
+ggplot() + geom_map(data = map_data("world"), map = map_data("world"), aes(map_id = region)) + geom_point(data = earthquake_df_3_4, aes(longitude, latitude, size = mag, color = mag)) + scale_size_continuous(name ="mag of earthquake scale", range = c(0.5,1))
+
+ggplot() + geom_map(data = map_data("world"), map = map_data("world"), aes(map_id = region)) + geom_point(data = earthquake_df_4_5, aes(longitude, latitude, size = mag, color = mag)) + scale_size_continuous(name ="mag of earthquake scale", range = c(0.5,1))
+
+ggplot() + geom_map(data = map_data("world"), map = map_data("world"), aes(map_id = region)) + geom_point(data = earthquake_df_5_6, aes(longitude, latitude, size = mag, color = mag)) + scale_size_continuous(name ="mag of earthquake scale", range = c(0.5,1))
+
+ggplot() + geom_map(data = map_data("world"), map = map_data("world"), aes(map_id = region)) + geom_point(data = earthquake_df_6_7, aes(longitude, latitude, size = mag, color = mag)) + scale_size_continuous(name ="mag of earthquake scale", range = c(1,2))
+
+ggplot() + geom_map(data = map_data("world"), map = map_data("world"), aes(map_id = region)) + geom_point(data = earthquake_df_7_8, aes(longitude, latitude, size = mag, color = mag)) + scale_size_continuous(name ="mag of earthquake scale", range = c(1,2))
+
+```
+
+
+What can you conclude about the locations of strong/weak earthquakes?
+
+Answer:
+I can conclude that strong earthquakes tend to be in areas less settled by humans. Weak earthquakes tend to be in North America.
+
+
+
+d. (6pt) Parse the column representing the time to extract (i) the number of days since the beginning of the year, and (ii) the time of day, in units of hours since midnight from , as two new separate numeric columns. <br>
+
+That is, for example the date `2022-03-10T17:40:28.123Z` will be converted to $31+28+10=69$ days since the beginning of the year (the numbers of days in the first months are January:31, February:28, March:31, April:30, May:31), and to $17+40/60+28/3600=17.6744$ hours since midnight (we ignore fractions of seconds here). <br>
+
+```{r}
+time_col = earthquake_df$time
+time_col = substr(time_col, 12, 19)
+time_col = strptime(time_col, format = "%H:%M:%S")
+time_col_hour = hour(time_col)
+time_col_minute = minute(time_col)/60
+time_col_second = second(time_col)/3600
+time_of_day = round(time_col_hour + time_col_minute + time_col_second, digits = 3)
+
+date_col = as.Date(earthquake_df$time)
+startdate = as.Date("2022/01/01")
+day_of_year = as.numeric(difftime(date_col, startdate, units = "days"))
+time_earthquake_df = cbind(day_of_year, time_of_day, earthquake_df)
+time_earthquake_df = subset(time_earthquake_df, select = -time)
+time_earthquake_df
+
+```
+
+
+ Plot pairwise correlations of the magnitude (`mag`), `depth`, `day-of-year` and `time-of-day`. (The `depth` column represents the depth below the ground in km of the center of the earthquake). For which pairs of variables there is a significant correlation? 
+
+You may use the `ggpairs` command from the `GGally` package.
+
+```{r}
+ggpairs(time_earthquake_df, columns = c("mag", "depth", "day_of_year", "time_of_day"))
+```
+
+Answer:
+For niether of the variables they have high correlation which can tell us that the time of day and day in the year have close to no effect on accurencies of earthquakes.
+
+
+
+e. (9pt) We want to test if there are times in the day in which earthquakes are more or less commons. Let $t_i$ be the time of each earthquake $i$ in the day (between $00:00:00$ and $23:59:59$), in units of hours, calculated in (d.). <br> 
+
+Test the null hypothesis $H_0: t_i \sim U[0, 24]$ against the complex alternative 
+
+$H_1: t_i \nsim U[0, 24]$. We test using the Pearson chi-square statistic: 
+
+$$
+
+S = \sum_{i=1}^{24}  \frac{(o_{i}-e_{i})^2}{e_{i}}
+
+$$
+
+where $o_{i}$ is the number of earthquakes at hour $i$ (e.g. between $00:00:00$ and $00:59:59$ for $i=1$, between $01:00:00$ and $01:59:59$ for $i=2$ etc. You may ignore the minutes and seconds information and extract just the hour for this sub-question), and $e_i$ is the expected value of $\frac{n}{24}$, with $n$ being the total number of earthquakes. Report the test statistic and the p-value, using the $\chi^2(24-1)$ approximation for the null distribution. Would you reject the null hypothesis at significance level $\alpha=0.01$? <br>
+
+```{r}
+O_i = c() #vector of sum of EQ at each hour
+for (o_i in 0:23) {
+  O_i = append(O_i, sum(time_col_hour == o_i))
+}
+
+
+n = length(time_col_hour) #total amount of EQ
+e_i = n/24
+S = sum((O_i - e_i)^2)/e_i
+
+P_val_S_test = pchisq(q = S, df = 23, lower.tail = "TRUE") 
+P_val_S_test
+```
+
+Answer:
+I wouldn't reject the null hypothesis since the P-value is smaller than alpha=0.01
